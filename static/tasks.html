@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Langfuse Cleaner — 任务管理</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f2f5; color: #1a1a1a;
+  }
+  /* Navbar */
+  .navbar {
+    background: #fff; padding: 0 24px; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); position: sticky; top: 0; z-index: 10;
+  }
+  .navbar h1 { font-size: 18px; color: #1890ff; }
+  .navbar .actions { display: flex; gap: 12px; align-items: center; }
+  .btn {
+    padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px;
+    cursor: pointer; transition: all .2s; outline: none;
+  }
+  .btn-primary { background: #1890ff; color: #fff; }
+  .btn-primary:hover { background: #40a9ff; }
+  .btn-default { background: #fff; color: #333; border: 1px solid #d9d9d9; }
+  .btn-default:hover { border-color: #1890ff; color: #1890ff; }
+  .btn-danger { background: #fff; color: #ff4d4f; border: 1px solid #ff4d4f; }
+  .btn-danger:hover { background: #ff4d4f; color: #fff; }
+  .btn-success { background: #52c41a; color: #fff; }
+  .btn-success:hover { background: #73d13d; }
+  .btn-sm { padding: 4px 12px; font-size: 13px; }
+
+  /* Main */
+  .main { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+
+  /* Task Card */
+  .task-card {
+    background: #fff; border-radius: 8px; padding: 20px 24px;
+    margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    display: flex; justify-content: space-between; align-items: center;
+    transition: box-shadow .2s;
+  }
+  .task-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+  .task-info { flex: 1; }
+  .task-name { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .task-meta { font-size: 13px; color: #666; display: flex; gap: 16px; flex-wrap: wrap; }
+  .task-meta span { white-space: nowrap; }
+  .status-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 10px;
+    font-size: 12px; font-weight: 500;
+  }
+  .status-active { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+  .status-paused { background: #fafafa; color: #999; border: 1px solid #d9d9d9; }
+  .task-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* Modal */
+  .overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,.45); z-index: 100; justify-content: center;
+    align-items: flex-start; padding-top: 8vh;
+  }
+  .overlay.active { display: flex; }
+  .modal {
+    background: #fff; border-radius: 8px; width: 460px; max-width: 90vw;
+    box-shadow: 0 4px 16px rgba(0,0,0,.15); padding: 24px;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 20px; }
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block; font-size: 13px; color: #333; margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .field input, .field select {
+    width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9;
+    border-radius: 6px; font-size: 14px; outline: none; transition: border-color .2s;
+    background: #fff;
+  }
+  .field input:focus, .field select:focus { border-color: #1890ff; }
+  .field .hint { font-size: 12px; color: #999; margin-top: 2px; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .modal-error { color: #ff4d4f; font-size: 13px; margin-top: 8px; display: none; }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: 72px; right: 24px; padding: 10px 20px;
+    border-radius: 6px; font-size: 14px; color: #fff; z-index: 200;
+    opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  .toast-success { background: #52c41a; }
+  .toast-error { background: #ff4d4f; }
+  .toast-info { background: #1890ff; }
+
+  .empty { text-align: center; color: #999; padding: 60px 0; font-size: 15px; }
+  .loading { text-align: center; color: #999; padding: 60px 0; font-size: 15px; }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+  <h1>Langfuse Cleaner</h1>
+  <div class="actions">
+    <button class="btn btn-primary" onclick="openCreate()">＋ 新建任务</button>
+    <button class="btn btn-sm btn-default" onclick="logout()">退出</button>
+  </div>
+</nav>
+
+<div class="main" id="main">
+  <div class="loading">加载中...</div>
+</div>
+
+<!-- Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">新建任务</h2>
+    <div class="field">
+      <label for="f_name">任务名称</label>
+      <input id="f_name" placeholder="例如：清理生产项目30天前数据">
+    </div>
+    <div class="field">
+      <label for="f_project">Langfuse 项目</label>
+      <select id="f_project"></select>
+    </div>
+    <div class="field">
+      <label for="f_retention">时间范围</label>
+      <select id="f_retention">
+        <option value="3">3 天以前</option>
+        <option value="7">7 天以前</option>
+        <option value="15">15 天以前</option>
+        <option value="30" selected>30 天以前</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="f_cron">Cron 表达式</label>
+      <input id="f_cron" placeholder="0 3 * * *（每天凌晨 3 点）">
+      <div class="hint">5 字段标准 cron：分 时 日 月 周</div>
+    </div>
+    <div class="field">
+      <label for="f_batch">每批数量</label>
+      <input id="f_batch" type="number" min="50" max="200" value="200">
+      <div class="hint">范围 50–200，默认 200</div>
+    </div>
+    <div class="field">
+      <label for="f_public_key">Public Key</label>
+      <input id="f_public_key" placeholder="pk-lf-...">
+      <div class="hint">项目级别的 Public Key</div>
+    </div>
+    <div class="field">
+      <label for="f_secret_key">Secret Key</label>
+      <input id="f_secret_key" type="password" placeholder="sk-lf-...">
+      <div class="hint">项目级别的 Secret Key</div>
+    </div>
+    <div class="modal-error" id="modalError"></div>
+    <div class="modal-footer">
+      <button class="btn btn-default" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="modalSubmit" onclick="submitTask()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN = localStorage.getItem('token');
+if (!TOKEN) window.location.href = '/static/login.html';
+
+// ── Toast ──
+
+let toastTimer;
+function showToast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast toast-' + type + ' show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 2500);
+}
+
+// ── Auth Fetch ──
+
+async function api(path, opts = {}) {
+  const headers = { ...opts.headers, 'Authorization': 'Bearer ' + TOKEN };
+  if (opts.body && typeof opts.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
+  }
+  const resp = await fetch(path, { ...opts, headers });
+  if (resp.status === 401) { localStorage.removeItem('token'); window.location.href = '/static/login.html'; return; }
+  return resp;
+}
+
+// ── Load Tasks ──
+
+let tasks = [];
+async function loadTasks() {
+  const main = document.getElementById('main');
+  main.innerHTML = '<div class="loading">加载中...</div>';
+  try {
+    const resp = await api('/api/tasks');
+    tasks = await resp.json();
+    renderTasks();
+  } catch (e) {
+    main.innerHTML = '<div class="empty">加载失败，请刷新重试</div>';
+  }
+}
+
+function renderTasks() {
+  const main = document.getElementById('main');
+  if (!tasks.length) {
+    main.innerHTML = '<div class="empty">暂无任务，点击「新建任务」开始</div>';
+    return;
+  }
+  const retentionMap = { 7: '7 天以前', 15: '15 天以前', 30: '30 天以前' };
+  main.innerHTML = tasks.map(t => `
+    <div class="task-card">
+      <div class="task-info">
+        <div class="task-name">${esc(t.name)} <span class="status-badge ${t.status === 'active' ? 'status-active' : 'status-paused'}">${t.status === 'active' ? '运行中' : '已暂停'}</span></div>
+        <div class="task-meta">
+          <span>📁 ${esc(t.project_name || t.project_id)}</span>
+          <span>🕐 ${retentionMap[t.retention_days] || t.retention_days + ' 天以前'}</span>
+          <span>⏰ ${esc(t.schedule)}</span>
+          <span>📦 每批 ${t.batch_size || 200} 条</span>
+          <span>🔑 ${esc((t.public_key || '').slice(0, 15) + '...' || '未设置')}</span>
+        </div>
+      </div>
+      <div class="task-actions">
+        <button class="btn btn-sm btn-default" onclick="toggleTask('${t.id}')" title="启停">${t.status === 'active' ? '⏸ 暂停' : '▶ 启动'}</button>
+        <button class="btn btn-sm btn-success" onclick="executeTask('${t.id}')">⚡ 立即执行</button>
+        <button class="btn btn-sm btn-default" onclick="openEdit('${t.id}')">✎ 编辑</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteTask('${t.id}')">✕ 删除</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function esc(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+// ── Modal ──
+
+let editingId = null;
+let projects = [];
+
+async function loadProjects() {
+  try {
+    const resp = await api('/api/projects');
+    projects = await resp.json();
+    const sel = document.getElementById('f_project');
+    sel.innerHTML = projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (${esc(p.id)})</option>`).join('');
+  } catch (e) {
+    showToast('加载项目列表失败', 'error');
+  }
+}
+
+function openCreate() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = '新建任务';
+  document.getElementById('modalSubmit').textContent = '创建';
+  document.getElementById('f_name').value = '';
+  document.getElementById('f_retention').value = '30';
+  document.getElementById('f_cron').value = '';
+  document.getElementById('f_batch').value = '200';
+  document.getElementById('f_public_key').value = '';
+  document.getElementById('f_secret_key').value = '';
+  document.getElementById('modalError').style.display = 'none';
+  loadProjects();
+  document.getElementById('overlay').classList.add('active');
+}
+
+function openEdit(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = '编辑任务';
+  document.getElementById('modalSubmit').textContent = '保存';
+  document.getElementById('f_name').value = t.name;
+  document.getElementById('f_retention').value = String(t.retention_days);
+  document.getElementById('f_cron').value = t.schedule;
+  document.getElementById('f_batch').value = t.batch_size || 200;
+  document.getElementById('f_public_key').value = t.public_key || '';
+  document.getElementById('f_secret_key').value = t.secret_key || '';
+  document.getElementById('modalError').style.display = 'none';
+  loadProjects().then(() => {
+    document.getElementById('f_project').value = t.project_id;
+  });
+  document.getElementById('overlay').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('overlay').classList.remove('active');
+}
+
+async function submitTask() {
+  const btn = document.getElementById('modalSubmit');
+  const err = document.getElementById('modalError');
+  btn.disabled = true;
+  err.style.display = 'none';
+
+  const selectedProject = projects.find(p => p.id === document.getElementById('f_project').value);
+  const body = {
+    name: document.getElementById('f_name').value,
+    project_id: document.getElementById('f_project').value,
+    project_name: selectedProject ? selectedProject.name : '',
+    public_key: document.getElementById('f_public_key').value.trim(),
+    secret_key: document.getElementById('f_secret_key').value.trim(),
+    retention_days: parseInt(document.getElementById('f_retention').value),
+    batch_size: parseInt(document.getElementById('f_batch').value),
+    schedule: document.getElementById('f_cron').value,
+  };
+
+  try {
+    const resp = editingId
+      ? await api('/api/tasks/' + editingId, { method: 'PUT', body })
+      : await api('/api/tasks', { method: 'POST', body });
+    const data = await resp.json();
+    if (!resp.ok) {
+      err.textContent = data.error || '操作失败';
+      err.style.display = 'block';
+    } else {
+      closeModal();
+      showToast(editingId ? '任务已更新' : '任务已创建', 'success');
+      loadTasks();
+    }
+  } catch (e) {
+    err.textContent = '网络错误';
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Actions ──
+
+async function toggleTask(id) {
+  try {
+    const resp = await api('/api/tasks/' + id + '/toggle', { method: 'POST' });
+    if (resp.ok) {
+      const data = await resp.json();
+      showToast(data.status === 'active' ? '任务已启动' : '任务已暂停', 'success');
+      loadTasks();
+    }
+  } catch (e) {
+    showToast('操作失败', 'error');
+  }
+}
+
+async function executeTask(id) {
+  try {
+    const t = tasks.find(t => t.id === id);
+    const resp = await api('/api/tasks/' + id + '/execute', { method: 'POST' });
+    if (resp.ok) {
+      showToast(`"${t ? t.name : id}" 开始执行，查看终端日志了解进度`, 'info');
+    } else {
+      const data = await resp.json();
+      showToast(data.error || '执行失败', 'error');
+    }
+  } catch (e) {
+    showToast('执行失败', 'error');
+  }
+}
+
+async function deleteTask(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!confirm(`确认删除任务「${t ? t.name : id}」？`)) return;
+  try {
+    const resp = await api('/api/tasks/' + id, { method: 'DELETE' });
+    if (resp.ok) {
+      showToast('任务已删除', 'success');
+      loadTasks();
+    } else {
+      const data = await resp.json();
+      showToast(data.error || '删除失败', 'error');
+    }
+  } catch (e) {
+    showToast('删除失败', 'error');
+  }
+}
+
+function logout() {
+  localStorage.removeItem('token');
+  window.location.href = '/static/login.html';
+}
+
+// ── Init ──
+
+document.getElementById('overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+loadTasks();
+</script>
+
+</body>
+</html>

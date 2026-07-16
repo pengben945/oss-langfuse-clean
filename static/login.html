@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Langfuse Cleaner — 登录</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f2f5;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+  }
+  .card {
+    background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    padding: 40px; width: 360px; max-width: 90vw;
+  }
+  .card h1 { font-size: 20px; text-align: center; margin-bottom: 24px; color: #1a1a1a; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 14px; color: #333; margin-bottom: 6px; }
+  .field input {
+    width: 100%; padding: 10px 12px; border: 1px solid #d9d9d9;
+    border-radius: 6px; font-size: 14px; outline: none; transition: border-color .2s;
+  }
+  .field input:focus { border-color: #1890ff; }
+  .btn {
+    width: 100%; padding: 10px; background: #1890ff; color: #fff;
+    border: none; border-radius: 6px; font-size: 14px; cursor: pointer;
+    transition: background .2s;
+  }
+  .btn:hover { background: #40a9ff; }
+  .btn:disabled { background: #b0d4ff; cursor: not-allowed; }
+  .error { color: #ff4d4f; font-size: 13px; text-align: center; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Langfuse Cleaner</h1>
+  <div class="field">
+    <label for="password">密码</label>
+    <input id="password" type="password" placeholder="请输入登录密码" autofocus>
+  </div>
+  <button class="btn" id="loginBtn" onclick="login()">登 录</button>
+  <div class="error" id="error">密码错误</div>
+</div>
+
+<script>
+async function login() {
+  const btn = document.getElementById('loginBtn');
+  const error = document.getElementById('error');
+  btn.disabled = true;
+  btn.textContent = '登录中...';
+  error.style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: document.getElementById('password').value }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      error.textContent = data.error || '登录失败';
+      error.style.display = 'block';
+    } else {
+      localStorage.setItem('token', data.token);
+      window.location.href = '/static/tasks.html';
+    }
+  } catch (e) {
+    error.textContent = '网络错误，请稍后重试';
+    error.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '登 录';
+  }
+}
+
+// 回车登录
+document.getElementById('password').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') login();
+});
+</script>
+
+</body>
+</html>

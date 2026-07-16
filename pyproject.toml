@@ -1,0 +1,13 @@
+[project]
+name = "langfuse-cleaner"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "apscheduler",
+    "pyjwt",
+    "httpx",
+    "python-dotenv",
+    "boto3",
+]

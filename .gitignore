@@ -1,0 +1,16 @@
+# 环境配置
+.env
+
+# 数据文件
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.idea/
+
+# 日志
+app.log
