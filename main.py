@@ -20,7 +20,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -468,6 +468,7 @@ def _delete_expired_objects(bucket: str, prefixes: list[str], cutoff: datetime) 
     return total_deleted
 
 scheduler = AsyncIOScheduler()
+_main_loop: "asyncio.AbstractEventLoop | None" = None
 
 
 def _job_id(task_id: str) -> str:
@@ -503,12 +504,8 @@ def _execute_scheduled(task_id: str) -> None:
     if task is None or task["status"] != "active":
         logger.info(f"任务 {task_id} 不存在或已暂停，跳过")
         return
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        # 调度器在线程中执行，不在事件循环内
-        loop = asyncio.get_event_loop()
-    asyncio.run_coroutine_threadsafe(_cleanup_wrapper(task), loop)
+    assert _main_loop is not None
+    asyncio.run_coroutine_threadsafe(_cleanup_wrapper(task), _main_loop)
 
 
 async def _cleanup_wrapper(task: dict) -> None:
@@ -574,6 +571,8 @@ def validate_task_body(body: dict) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
     logger.info("Langfuse Cleaner 启动")
     scheduler.start()
     restore_jobs()
@@ -720,6 +719,11 @@ async def execute_task(task_id: str, user: str = Depends(get_current_user)):
 os.makedirs("static", exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
 
 
 @app.get("/")
